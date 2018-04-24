@@ -119,11 +119,11 @@ function createPanZoom(domElement, options) {
       throw new Error('Invalid rectangle');
     }
 
-    var dh = h/rectHeight
-    var dw = w/rectWidth
+    var dh = h / rectHeight
+    var dw = w / rectWidth
     var scale = Math.min(dw, dh)
-    transform.x = -(rect.left + rectWidth/2) * scale + w/2
-    transform.y = -(rect.top + rectHeight/2) * scale + h/2
+    transform.x = -(rect.left + rectWidth / 2) * scale + w / 2
+    transform.y = -(rect.top + rectHeight / 2) * scale + h / 2
     transform.scale = scale
   }
 
@@ -150,11 +150,11 @@ function createPanZoom(domElement, options) {
       // just bail out;
       return;
     }
-    var dh = h/bbox.height
-    var dw = w/bbox.width
+    var dh = h / bbox.height
+    var dw = w / bbox.width
     var scale = Math.min(dw, dh)
-    transform.x = -(bbox.left + bbox.width/2) * scale + w/2 + left
-    transform.y = -(bbox.top + bbox.height/2) * scale + h/2 + top
+    transform.x = -(bbox.left + bbox.width / 2) * scale + w / 2 + left
+    transform.y = -(bbox.top + bbox.height / 2) * scale + h / 2 + top
     transform.scale = scale
   }
 
@@ -191,21 +191,23 @@ function createPanZoom(domElement, options) {
     var adjusted = false
     var clientRect = getClientRect()
 
-    var diff = boundingBox.left - clientRect.right
-    if (diff > 0) {
+
+
+    var diff = boundingBox.left - clientRect.left
+    if (diff < 0) {
       transform.x += diff
       adjusted = true
     }
     // check the other side:
-    diff = boundingBox.right - clientRect.left
-    if (diff < 0) {
+    diff = boundingBox.right - clientRect.right
+    if (diff > 0) {
       transform.x += diff
       adjusted = true
     }
 
     // y axis:
-    diff = boundingBox.top - clientRect.bottom
-    if (diff > 0) {
+    diff = boundingBox.top - clientRect.top
+    if (diff < 0) {
       // we adjust transform, so that it matches exactly our boinding box:
       // transform.y = boundingBox.top - (boundingBox.height + boundingBox.y) * transform.scale =>
       // transform.y = boundingBox.top - (clientRect.bottom - transform.y) =>
@@ -214,10 +216,23 @@ function createPanZoom(domElement, options) {
       adjusted = true
     }
 
-    diff = boundingBox.bottom - clientRect.top
-    if (diff < 0) {
+    diff = boundingBox.bottom - clientRect.bottom
+    if (diff > 0) {
       transform.y += diff
       adjusted = true
+    }
+
+    var cW = clientRect.right - clientRect.left;
+    var pW = (clientRect.right - clientRect.left) * boundsPadding
+    var cH = clientRect.bottom - clientRect.top;
+    var pH = (clientRect.bottom - clientRect.top) * boundsPadding
+    var bW = boundingBox.right - boundingBox.left;
+    var bH = boundingBox.bottom - boundingBox.top;
+    if (cW <= bW) {
+      transform.x = (bW - cW) / 2 + pW;
+    }
+    if (cH <= bH) {
+      transform.y = (bH - cH) / 2 + pH;
     }
     return adjusted
   }
@@ -306,8 +321,9 @@ function createPanZoom(domElement, options) {
     transform.x = x - ratio * (x - transform.x)
     transform.y = y - ratio * (y - transform.y)
 
+    transform.scale *= ratio
     var transformAdjusted = keepTransformInsideBounds()
-    if (!transformAdjusted) transform.scale *= ratio
+    //if (!transformAdjusted) transform.scale *= ratio
 
     triggerEvent('zoom')
 
@@ -324,30 +340,57 @@ function createPanZoom(domElement, options) {
     if (!parent) throw new Error('ui element is required to be within the scene')
 
     var clientRect = ui.getBoundingClientRect()
-    var cx = clientRect.left + clientRect.width/2
-    var cy = clientRect.top + clientRect.height/2
+    var cx = clientRect.left + clientRect.width / 2
+    var cy = clientRect.top + clientRect.height / 2
 
     var container = parent.getBoundingClientRect()
-    var dx = container.width/2 - cx
-    var dy = container.height/2 - cy
+    var dx = container.width / 2 - cx
+    var dy = container.height / 2 - cy
 
     internalMoveBy(dx, dy, true)
   }
 
   function internalMoveBy(dx, dy, smooth) {
+    var boundingBox = getBoundingBox();
+    if (boundingBox) {
+      var clientRect = getClientRect();
+      var cW = clientRect.right - clientRect.left;
+      var pW = (clientRect.right - clientRect.left) * boundsPadding
+      var cH = clientRect.bottom - clientRect.top;
+      var pH = (clientRect.bottom - clientRect.top) * boundsPadding
+      var bW = boundingBox.right - boundingBox.left;
+      var bH = boundingBox.bottom - boundingBox.top;
+      if (cW + pW  <= bW) {
+        dx = 0;
+        transform.x = (bW - cW) / 2 + pW;
+
+      }
+      if (cH + pH <= bH) {
+        dy = 0;
+        transform.y = (bH - cH) / 2 + pH;
+      }
+
+    }
+
     if (!smooth) {
       return moveBy(dx, dy)
     }
 
     if (moveByAnimation) moveByAnimation.cancel()
 
-    var from = { x: 0, y: 0 }
-    var to = { x: dx, y : dy }
+    var from = {
+      x: 0,
+      y: 0
+    }
+    var to = {
+      x: dx,
+      y: dy
+    }
     var lastX = 0
     var lastY = 0
 
     moveByAnimation = animate(from, to, {
-      step: function(v) {
+      step: function (v) {
         moveBy(v.x - lastX, v.y - lastY)
 
         lastX = v.x
@@ -408,7 +451,9 @@ function createPanZoom(domElement, options) {
   }
 
   function onKeyDown(e) {
-    var x = 0, y = 0, z = 0
+    var x = 0,
+      y = 0,
+      z = 0
     if (e.keyCode === 38) {
       y = 1 // up
     } else if (e.keyCode === 40) {
@@ -440,7 +485,7 @@ function createPanZoom(domElement, options) {
 
     if (z) {
       var scaleMultiplier = getScaleMultiplier(z)
-      publicZoomTo(owner.clientWidth/2, owner.clientHeight/2, scaleMultiplier)
+      publicZoomTo(owner.clientWidth / 2, owner.clientHeight / 2, scaleMultiplier)
     }
   }
 
@@ -451,7 +496,7 @@ function createPanZoom(domElement, options) {
     } else if (e.touches.length === 2) {
       // handleTouchMove() will care about pinch zoom.
       pinchZoomLength = getPinchZoomLength(e.touches[0], e.touches[1])
-      multitouch  = true
+      multitouch = true
       startTouchListenerIfNeeded()
     }
   }
@@ -521,8 +566,8 @@ function createPanZoom(domElement, options) {
         scaleMultiplier = getScaleMultiplier(delta)
       }
 
-      mouseX = (t1.clientX + t2.clientX)/2
-      mouseY = (t1.clientY + t2.clientY)/2
+      mouseX = (t1.clientX + t2.clientX) / 2
+      mouseY = (t1.clientY + t2.clientY) / 2
 
       publicZoomTo(mouseX, mouseY, scaleMultiplier)
 
@@ -637,34 +682,38 @@ function createPanZoom(domElement, options) {
   }
 
   function smoothZoom(clientX, clientY, scaleMultiplier) {
-      var fromValue = transform.scale
-      var from = {scale: fromValue}
-      var to = {scale: scaleMultiplier * fromValue}
+    var fromValue = transform.scale
+    var from = {
+      scale: fromValue
+    }
+    var to = {
+      scale: scaleMultiplier * fromValue
+    }
 
-      smoothScroll.cancel()
-      cancelZoomAnimation()
+    smoothScroll.cancel()
+    cancelZoomAnimation()
 
-      // TODO: should consolidate this and publicZoomTo
-      triggerEvent('zoom')
+    // TODO: should consolidate this and publicZoomTo
+    triggerEvent('zoom')
 
-      zoomToAnimation = animate(from, to, {
-        step: function(v) {
-          zoomAbs(clientX, clientY, v.scale)
-        }
-      })
+    zoomToAnimation = animate(from, to, {
+      step: function (v) {
+        zoomAbs(clientX, clientY, v.scale)
+      }
+    })
   }
 
   function publicZoomTo(clientX, clientY, scaleMultiplier) {
-      smoothScroll.cancel()
-      cancelZoomAnimation()
-      return zoomByRatio(clientX, clientY, scaleMultiplier)
+    smoothScroll.cancel()
+    cancelZoomAnimation()
+    return zoomByRatio(clientX, clientY, scaleMultiplier)
   }
 
   function cancelZoomAnimation() {
-      if (zoomToAnimation) {
-          zoomToAnimation.cancel()
-          zoomToAnimation = null
-      }
+    if (zoomToAnimation) {
+      zoomToAnimation.cancel()
+      zoomToAnimation = null
+    }
   }
 
   function getScaleMultiplier(delta) {
@@ -700,7 +749,7 @@ function createPanZoom(domElement, options) {
   }
 }
 
-function noop() { }
+function noop() {}
 
 function validateBounds(bounds) {
   var boundsType = typeof bounds
